@@ -1,0 +1,1 @@
+"""ArchInsight Backend Application"""
