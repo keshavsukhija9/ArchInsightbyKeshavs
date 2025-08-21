@@ -34,9 +34,8 @@ redis_client: Optional[redis.Redis] = None
 
 
 async def init_db() -> None:
-    """Initialize all database connections"""
-    global postgres_engine, async_postgres_engine, SessionLocal, AsyncSessionLocal
-    global neo4j_driver, redis_client
+    """Initialize database connections"""
+    global postgres_engine, async_postgres_engine, neo4j_driver, redis_client, AsyncSessionLocal, SessionLocal
     
     try:
         # Initialize PostgreSQL
@@ -76,36 +75,52 @@ async def init_db() -> None:
         
         logger.info("PostgreSQL connection initialized successfully")
         
-        # Initialize Neo4j
-        logger.info("Initializing Neo4j connection...")
-        neo4j_driver = AsyncGraphDatabase.driver(
-            settings.NEO4J_URI,
-            auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
-            max_connection_lifetime=3600,
-            max_connection_pool_size=50,
-            connection_acquisition_timeout=60,
-        )
+        # Initialize Neo4j (optional for development)
+        if settings.ENVIRONMENT == "production":
+            logger.info("Initializing Neo4j connection...")
+            try:
+                neo4j_driver = AsyncGraphDatabase.driver(
+                    settings.NEO4J_URI,
+                    auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+                    max_connection_lifetime=3600,
+                    max_connection_pool_size=50,
+                    connection_acquisition_timeout=60,
+                )
+                
+                # Test Neo4j connection
+                async with neo4j_driver.session() as session:
+                    result = await session.run("RETURN 1 as test")
+                    await result.single()
+                
+                logger.info("Neo4j connection initialized successfully")
+            except Exception as e:
+                logger.warning(f"Neo4j connection failed (optional): {e}")
+                neo4j_driver = None
+        else:
+            logger.info("Skipping Neo4j initialization in development mode")
+            neo4j_driver = None
         
-        # Test Neo4j connection
-        async with neo4j_driver.session() as session:
-            result = await session.run("RETURN 1 as test")
-            await result.single()
-        
-        logger.info("Neo4j connection initialized successfully")
-        
-        # Initialize Redis
-        logger.info("Initializing Redis connection...")
-        redis_client = redis.from_url(
-            settings.REDIS_URL,
-            encoding="utf-8",
-            decode_responses=True,
-            max_connections=20,
-        )
-        
-        # Test Redis connection
-        await redis_client.ping()
-        
-        logger.info("Redis connection initialized successfully")
+        # Initialize Redis (optional for development)
+        if settings.ENVIRONMENT == "production":
+            logger.info("Initializing Redis connection...")
+            try:
+                redis_client = redis.from_url(
+                    settings.REDIS_URL,
+                    encoding="utf-8",
+                    decode_responses=True,
+                    max_connections=20,
+                )
+                
+                # Test Redis connection
+                await redis_client.ping()
+                
+                logger.info("Redis connection initialized successfully")
+            except Exception as e:
+                logger.warning(f"Redis connection failed (optional): {e}")
+                redis_client = None
+        else:
+            logger.info("Skipping Redis initialization in development mode")
+            redis_client = None
         
     except Exception as e:
         logger.error(f"Failed to initialize databases: {e}")
